@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Search Example</title>
+  <meta charset="UTF-8">
+  <!-- Babel, d3 and friends. B -->
+  <script src="//ausftas.github.io/example-api-common/babel.min.js"></script>
+  <script src="//ausftas.github.io/example-api-common/d3.v4.js"></script>
+  <!-- look and feel -->
+  <link rel="stylesheet" type="text/css" href="http://blog.dfilimonov.com/github-ribbons-css/ribbons.css">
+  <link rel="stylesheet" type="text/css" href="//ausftas.github.io/example-api-common/style.css">
+  <script type="text/babel" data-presets="es2015" src="//ausftas.github.io/example-api-common/style.js"></script>
+  <!-- shared sources -->
+  <script type="text/babel" data-presets="es2015" src="//ausftas.github.io/example-api-common/common.js"></script>
+</head>
+<body>
+  <div id="header"></div>
+
+  <div id="example" class="content">
+    <h1>Direct Match Example</h1>
+
+    <div id="loading">
+      Please wait while it loads.
+    </div>
+
+    <div id="search" style="display: none;" >
+    Enter search keyword: <input type="search" id="searchInput" /> <button id="searchInputButton">Search</button>
+    </div>
+
+    <div id="searchResults" style="display: none;" >
+      <p id="searchKeywords" ></p>
+      <p id="searchCorrections" ></p>
+      <table border="1" cellspacing="0">
+        <thead>
+          <tr>
+            <th>Heading</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="searchResultsBody"></tbody>
+      </table>
+    </div>
+
+    <script type="text/babel">
+      FTAPortalAPIExample.start(async function(version, agreements)
+      {
+        const hierarchy = await FTAPortalAPIExample.invoke('/products/hierarchy.json');
+
+        const searchInput = d3.select('#searchInput');
+        const search = d3.select('#search');
+        const loading = d3.select('#loading');
+        const searchKeywords = d3.select('#searchKeywords');
+        const searchCorrections = d3.select('#searchCorrections');
+        const searchResultsBody = d3.select('#searchResultsBody');
+        const searchResults = d3.select('#searchResults');
+        const searchInputButton = d3.select('#searchInputButton');
+
+        // show agreement - country menu
+        let agreementCountries = [];
+        Object.keys(agreements).forEach(agreement =>
+        {
+          Object.keys(agreements[agreement].countries).forEach(country =>
+          {
+            agreementCountries.push(agreement + '-' + country);
+          });
+        });
+
+        // saved query
+        searchInput.val(localStorage.query || '')
+
+        // loading done
+        search.show();
+        loading.hide();
+
+        // perform search
+        async function performSearch()
+        {
+          // get input and save query
+          let query = localStorage.query = searchInput.val();
+
+          // perform search
+          const start = Date.now();
+          const results = await FTAPortalAPIExample.invoke('/products/search.json?query=' + FTAPortalAPIExample.formatSearchQuery(query));
+          const end = Date.now();
+          // show input keywords
+          searchKeywords.text(`You searched for "${query}". Results returned in ${end-start}ms.`);
+
+            // show results list and hierarchy
+
+          function showResult(result)
+          {
+            let element = document.createElement('tr');
+            let output = d3.select(element);
+
+            output.th(result.hscode);
+
+            output.td(result.description);// + ' [score: ' + result.score + '] ');
+
+            // output.td(result.score + '');
+
+            return element;
+          }
+
+          function showResults()
+          {
+            // show results
+            searchResultsBody.html('');
+            searchResultsBody.selectAll().data(results.products).enter().append(showResult);
+            searchResults.show();
+          }
+
+          let products = results.products;
+
+          let clusters = {};
+          for (const product of products) {
+              if (product.score) {
+                  product.description = hierarchy[product.hscode].description;
+                  let chapter = product.hscode.substr(0, 2);
+                  clusters[chapter] = clusters[chapter] || [];
+                  clusters[chapter].push(product);
+                  clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
+              }
+          }
+
+          clusters = Object.values(clusters).sort((a, b) => {
+            if (b.length === a.length) {
+              a = a.reduce((x, y) => x.score + y.score, {score: 0})
+              b = b.reduce((x, y) => x.score + y.score, {score: 0})
+              return b - a
+            }
+            return b.length - a.length
+          });
+
+          results.products = clusters.reduce((a, b) => a.concat(b), []);
+
+          showResults();
+        }
+
+        window.performSearch = performSearch;
+        searchInputButton.click(performSearch);
+        searchInput.keydown(() =>
+        {
+          if (d3.event.keyCode === 13)
+          {
+            performSearch();
+          }
+        });
+
+      });
+    </script>
+
+  </div>
+
+  <div id="footer"></div>
+
+</body>
+</html>
