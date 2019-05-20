@@ -158,11 +158,11 @@
           }
 
           if(searchInputDirect.property('checked')) 
-          products = products.filter(product => {
-            return product.description.split(/[^a-z]/gi)
-              .map(lancasterStemmer)
-              .filter(word => keywords.indexOf(word) >= 0).length > 0;
-          })
+            products = products.filter(product => {
+              return product.description.split(/[^a-z]/gi)
+                .map(lancasterStemmer)
+                .filter(word => keywords.indexOf(word) >= 0).length > 0;
+            })
 
           let clusters = {};
           for (const product of products) {
