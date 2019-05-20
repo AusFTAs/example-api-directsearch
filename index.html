@@ -38,7 +38,12 @@
 
     <div>
       <input type="checkbox" id="searchInputCluster" checked value="direct" />
-      <label for="searchInputCluster">Sort by hs order</label>
+      <label for="searchInputCluster">Sort by hs order within chapters</label>
+    </div>
+
+    <div>
+      <input type="checkbox" id="searchInputDirectMatch" checked value="direct" />
+      <label for="searchInputDirectMatch">Sort by direct match</label>
     </div>
 
     <div id="searchResults" style="display: none;">
@@ -65,6 +70,7 @@
         const searchInput = d3.select('#searchInput');
         const searchInputDirect = d3.select('#searchInputDirect');
         const searchInputCluster = d3.select('#searchInputCluster');
+        const searchInputDirectMatch = d3.select('#searchInputDirectMatch');
         
         const search = d3.select('#search');
         const loading = d3.select('#loading');        
@@ -75,7 +81,8 @@
         const searchInputButton = d3.select('#searchInputButton');
 
         searchInputDirect.on('change', performSearch);
-        searchInputCluster.on('change', performSearch);        
+        searchInputCluster.on('change', performSearch);
+        searchInputDirectMatch.on('change', performSearch);
 
         // show agreement - country menu
         let agreementCountries = [];
@@ -97,6 +104,11 @@
         // perform search
         async function performSearch()
         {
+
+          const flagDirect = searchInputDirect.property('checked');
+          const flagCluster = searchInputCluster.property('checked');
+          const flagDirectMatch = searchInputDirectMatch.property('checked');
+
           // get input and save query
           let query = localStorage.query = searchInput.val();
 
@@ -167,6 +179,8 @@
 
           let products = results.products.slice(0);
 
+          products = products.filter(product => product.score);
+
           for (const product of products) {
               product.description = hierarchy[product.hscode].description;
           }
@@ -174,39 +188,48 @@
           products.forEach(product => {
             product.directMatches = product.description.split(/[^a-z]/gi)
                 .map(lancasterStemmer)
+                .filter(i => i)
                 .filter(word => keywords.indexOf(word) >= 0).length;
           });
 
-          if(searchInputDirect.property('checked')) {
+          if(flagDirect) {
             products = products.filter(product => {
               return product.directMatches > 0;
             })
           }
 
-          if(searchInputCluster.property('checked')) {
+          if(flagCluster) {
 
             let clusters = {};
             for (const product of products) {
-                if (product.score) {
-                    product.description = hierarchy[product.hscode].description;
-                    let chapter = product.hscode.substr(0, 2);
-                    clusters[chapter] = clusters[chapter] || [];
-                    clusters[chapter].push(product);
-                    clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
-                }
+              product.description = hierarchy[product.hscode].description;
+              let chapter = product.hscode.substr(0, 2);
+              clusters[chapter] = clusters[chapter] || [];
+              clusters[chapter].push(product);
+              clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
             }
 
             clusters = Object.values(clusters).sort((a, b) => {
-              a = a.map(x => x.score).reduce((x, y) => x + y, 0)
-              b = b.map(x => x.score).reduce((x, y) => x + y, 0)
-              return b - a
+              let aa, bb;
+
+              if (flagDirectMatch) {
+                aa = a.map(x => x.directMatches).reduce((x, y) => x + y, 0)
+                bb = b.map(x => x.directMatches).reduce((x, y) => x + y, 0)
+                if (aa !== bb) {
+                  return bb -aa;
+                }
+              }
+              
+              aa = a.map(x => x.score).reduce((x, y) => x + y, 0)
+              bb = b.map(x => x.score).reduce((x, y) => x + y, 0)
+              return bb - aa
             });
 
             products = clusters.reduce((a, b) => a.concat(b), []);
 
           } else {
             products = products.sort((a, b) => {
-              if (a.directMatches !== b.directMatches) {
+              if (flagDirectMatch && a.directMatches !== b.directMatches) {
                 return b.directMatches - a.directMatches;
               }
               return b.score - a.score;
