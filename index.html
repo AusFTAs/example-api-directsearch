@@ -29,9 +29,16 @@
     <div id="search" style="display: none;">
       Enter search keyword:
       <input type="search" id="searchInput" />
+      <button id="searchInputButton">Search</button>
+    </div>
+    <div>
       <input type="checkbox" id="searchInputDirect" value="direct" />
       <label for="searchInputDirect">Direct matches only</label>
-      <button id="searchInputButton">Search</button>
+    </div>
+
+    <div>
+      <input type="checkbox" id="searchInputCluster" checked value="direct" />
+      <label for="searchInputCluster">Sort by hs order</label>
     </div>
 
     <div id="searchResults" style="display: none;">
@@ -42,6 +49,8 @@
           <tr>
             <th>Heading</th>
             <th>Details</th>
+            <th>Direct Matches</th>
+            <th>Score</th>
           </tr>
         </thead>
         <tbody id="searchResultsBody"></tbody>
@@ -55,6 +64,8 @@
 
         const searchInput = d3.select('#searchInput');
         const searchInputDirect = d3.select('#searchInputDirect');
+        const searchInputCluster = d3.select('#searchInputCluster');
+        
         const search = d3.select('#search');
         const loading = d3.select('#loading');        
         const searchKeywords = d3.select('#searchKeywords');
@@ -64,6 +75,7 @@
         const searchInputButton = d3.select('#searchInputButton');
 
         searchInputDirect.on('change', performSearch);
+        searchInputCluster.on('change', performSearch);        
 
         // show agreement - country menu
         let agreementCountries = [];
@@ -138,7 +150,9 @@
 
             output.td(formatText(result.description));// + ' [score: ' + result.score + '] ');
 
-            output.td(result.score + '');
+            output.td(result.directMatches + '');
+
+            output.td(result.score.toFixed(3) + '');
 
             return element;
           }
@@ -151,40 +165,55 @@
             searchResults.show();
           }
 
-          let products = results.products;
+          let products = results.products.slice(0);
 
           for (const product of products) {
               product.description = hierarchy[product.hscode].description;
           }
 
-          if(searchInputDirect.property('checked')) 
-            products = products.filter(product => {
-              return product.description.split(/[^a-z]/gi)
+          products.forEach(product => {
+            product.directMatches = product.description.split(/[^a-z]/gi)
                 .map(lancasterStemmer)
-                .filter(word => keywords.indexOf(word) >= 0).length > 0;
-            })
-
-          let clusters = {};
-          for (const product of products) {
-              if (product.score) {
-                  product.description = hierarchy[product.hscode].description;
-                  let chapter = product.hscode.substr(0, 2);
-                  clusters[chapter] = clusters[chapter] || [];
-                  clusters[chapter].push(product);
-                  clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
-              }
-          }
-
-          clusters = Object.values(clusters).sort((a, b) => {
-            if (b.length === a.length) {
-              a = a.reduce((x, y) => x.score + y.score, {score: 0})
-              b = b.reduce((x, y) => x.score + y.score, {score: 0})
-              return b - a
-            }
-            return b.length - a.length
+                .filter(word => keywords.indexOf(word) >= 0).length;
           });
 
-          results.products = clusters.reduce((a, b) => a.concat(b), []);
+          if(searchInputDirect.property('checked')) {
+            products = products.filter(product => {
+              return product.directMatches > 0;
+            })
+          }
+
+          if(searchInputCluster.property('checked')) {
+
+            let clusters = {};
+            for (const product of products) {
+                if (product.score) {
+                    product.description = hierarchy[product.hscode].description;
+                    let chapter = product.hscode.substr(0, 2);
+                    clusters[chapter] = clusters[chapter] || [];
+                    clusters[chapter].push(product);
+                    clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
+                }
+            }
+
+            clusters = Object.values(clusters).sort((a, b) => {
+              a = a.map(x => x.score).reduce((x, y) => x + y, 0)
+              b = b.map(x => x.score).reduce((x, y) => x + y, 0)
+              return b - a
+            });
+
+            products = clusters.reduce((a, b) => a.concat(b), []);
+
+          } else {
+            products = products.sort((a, b) => {
+              if (a.directMatches !== b.directMatches) {
+                return b.directMatches - a.directMatches;
+              }
+              return b.score - a.score;
+            });
+          }
+
+          results.products = products;
 
           showResults();
         }
