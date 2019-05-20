@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Search Example</title>
   <meta charset="UTF-8">
   <!-- Babel, d3 and friends. B -->
   <script src="//ausftas.github.io/example-api-common/babel.min.js"></script>
   <script src="//ausftas.github.io/example-api-common/d3.v4.js"></script>
+  <script src="lancaster-stemmer.js"></script>
   <!-- look and feel -->
   <link rel="stylesheet" type="text/css" href="http://blog.dfilimonov.com/github-ribbons-css/ribbons.css">
   <link rel="stylesheet" type="text/css" href="//ausftas.github.io/example-api-common/style.css">
@@ -13,6 +15,7 @@
   <!-- shared sources -->
   <script type="text/babel" data-presets="es2015" src="//ausftas.github.io/example-api-common/common.js"></script>
 </head>
+
 <body>
   <div id="header"></div>
 
@@ -23,13 +26,17 @@
       Please wait while it loads.
     </div>
 
-    <div id="search" style="display: none;" >
-    Enter search keyword: <input type="search" id="searchInput" /> <button id="searchInputButton">Search</button>
+    <div id="search" style="display: none;">
+      Enter search keyword:
+      <input type="search" id="searchInput" />
+      <input type="checkbox" id="searchInputDirect" value="direct" />
+      <label for="searchInputDirect">Direct matches only</label>
+      <button id="searchInputButton">Search</button>
     </div>
 
-    <div id="searchResults" style="display: none;" >
-      <p id="searchKeywords" ></p>
-      <p id="searchCorrections" ></p>
+    <div id="searchResults" style="display: none;">
+      <p id="searchKeywords"></p>
+      <p id="searchCorrections"></p>
       <table border="1" cellspacing="0">
         <thead>
           <tr>
@@ -47,13 +54,16 @@
         const hierarchy = await FTAPortalAPIExample.invoke('/products/hierarchy.json');
 
         const searchInput = d3.select('#searchInput');
+        const searchInputDirect = d3.select('#searchInputDirect');
         const search = d3.select('#search');
-        const loading = d3.select('#loading');
+        const loading = d3.select('#loading');        
         const searchKeywords = d3.select('#searchKeywords');
         const searchCorrections = d3.select('#searchCorrections');
         const searchResultsBody = d3.select('#searchResultsBody');
         const searchResults = d3.select('#searchResults');
         const searchInputButton = d3.select('#searchInputButton');
+
+        searchInputDirect.on('change', performSearch);
 
         // show agreement - country menu
         let agreementCountries = [];
@@ -85,7 +95,39 @@
           // show input keywords
           searchKeywords.text(`You searched for "${query}". Results returned in ${end-start}ms.`);
 
-            // show results list and hierarchy
+          // show results list and hierarchy
+
+          let keywords = query.split(/[^a-z]+/ig).map(lancasterStemmer);
+
+          function formatText(text) {
+            let out = [];
+            let left = text.substr(0)
+            let start = 0;
+            let index, match;
+
+            while ((match = left.match(/[^a-zA-Z]+/))) {
+                match = match[0];
+                index = left.indexOf(match)
+
+                let word = left.substr(0, index);
+                if (keywords.indexOf(lancasterStemmer(word)) !== -1) {
+                  out.push(`<b>${word}</b>`);
+                } else {
+                  out.push(word);
+                }
+
+                out.push(match);
+
+                left = left.substr(index + match.length)
+
+            }
+
+            if (left) {
+              out.push(left);
+            }
+
+            return out.join('');
+          }
 
           function showResult(result)
           {
@@ -94,9 +136,9 @@
 
             output.th(result.hscode);
 
-            output.td(result.description);// + ' [score: ' + result.score + '] ');
+            output.td(formatText(result.description));// + ' [score: ' + result.score + '] ');
 
-            // output.td(result.score + '');
+            output.td(result.score + '');
 
             return element;
           }
@@ -110,6 +152,17 @@
           }
 
           let products = results.products;
+
+          for (const product of products) {
+              product.description = hierarchy[product.hscode].description;
+          }
+
+          if(searchInputDirect.property('checked')) 
+          products = products.filter(product => {
+            return product.description.split(/[^a-z]/gi)
+              .map(lancasterStemmer)
+              .filter(word => keywords.indexOf(word) >= 0).length > 0;
+          })
 
           let clusters = {};
           for (const product of products) {
@@ -154,4 +207,5 @@
   <div id="footer"></div>
 
 </body>
+
 </html>
