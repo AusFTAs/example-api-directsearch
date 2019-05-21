@@ -211,7 +211,12 @@
               let chapter = product.hscode.substr(0, 2);
               clusters[chapter] = clusters[chapter] || [];
               clusters[chapter].push(product);
-              clusters[chapter].sort((a, b) => a.hscode > b.hscode? 1 : -1);
+              clusters[chapter].sort((a, b) => {
+                if (flagDirectMatch && a.directMatches !== b.directMatches) {
+                  return b.directMatches - a.directMatches;
+                }
+                return a.hscode > b.hscode? 1 : -1
+              });
             }
 
             clusters = Object.values(clusters).sort((a, b) => {
@@ -223,7 +228,7 @@
                 // aa = aa * 100 + a.map(x => x.score).reduce((x, y) => x + y, 0)
                 // bb = bb * 100 + b.map(x => x.score).reduce((x, y) => x + y, 0)
                 if (aa !== bb) {
-                  return bb -aa;
+                  return bb - aa;
                 }
               }
 
